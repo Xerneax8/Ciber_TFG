@@ -1,3 +1,4 @@
 config.py
 web*/
 .idea
+__pycache__

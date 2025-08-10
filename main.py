@@ -8,6 +8,7 @@ from pathlib import Path
 num_versions = 0
 
 
+# Get the names of the file that we are going to send to the LLM
 def get_source_files(path):
     files_list = []
     if os.path.isdir(path / "controller"):
@@ -19,6 +20,7 @@ def get_source_files(path):
     return files_list
 
 
+# Get an style for the frontend
 def take_style():
     with open("styles.txt", "r+") as f:
         styles = f.read()
@@ -30,13 +32,7 @@ def take_style():
 
 
 # Parse AI response
-
 def parser_ai(all_text: str, directory):
-    """
-    Parses a multi-file text block and writes each file to the correct folder
-    (supports static/ and templates/ or any other folder in the path).
-    """
-
     pattern = r"([\w\-/\.]+)\n```[a-zA-Z]*\n([\s\S]*?)```"
 
     matches = re.findall(pattern, all_text)
@@ -72,6 +68,7 @@ def check_compile(directory):
     os.system("sh " + directory + "/deploy-challenge.sh")
 
 
+# Read the code and return string
 def read_code(complete_path, source_files):
     with open(complete_path / source_files[0][0], "r+") as f:
         text = f.read()
@@ -80,65 +77,71 @@ def read_code(complete_path, source_files):
     return text
 
 
+# Parse read code, reducing the number of tokens
 def parse_code(source_code):
     lines = source_code.splitlines(keepends=True)
     result = []
     i = 0
     total_lines = len(lines)
 
+    # Patterns to look for in each language for a web challenge
     patterns = {
         'python': re.compile(r'^\s*@app\.route'),
         'java': re.compile(r'^\s*@(?:Get|Post|Put|Delete|Request)Mapping'),
         'js': re.compile(r'^\s*app\.(get|post|put|delete)\s*\(.*')
     }
 
-    def detect_type(line):
+    # Detect if the code is an specific language
+    def detect_language(line):
         for lang, pattern in patterns.items():
             if pattern.match(line):
                 return lang
         return None
 
-    def contiene_excluidos(bloque):
-        contenido = ''.join(bloque).lower()
-        return 'healthcheck' in contenido or 'health' in contenido
+    # Check if the function is a healthcheck, do not include it
+    def contain_exclude(bloque):
+        content = ''.join(bloque).lower()
+        return 'healthcheck' in content or 'health' in content
 
     while i < total_lines:
         line = lines[i]
-        tipo = detect_type(line)
+        language = detect_language(line)
 
-        if tipo == 'java':
+        # Java language
+        if language == 'java':
             actual_block = []
-            # Captura todas las anotaciones arriba del método
+            # Capture Spring Boot annotations
             while i < total_lines and lines[i].strip().startswith('@'):
                 actual_block.append(lines[i])
                 i += 1
 
-            # Ahora debe venir la firma del método
+            # Detect method signature
             while i < total_lines and not lines[i].strip().startswith("public"):
                 actual_block.append(lines[i])
                 i += 1
 
-            # Agrega la firma del método
+            # Add the signature
             if i < total_lines and lines[i].strip().startswith("public"):
                 actual_block.append(lines[i])
                 brace_count = lines[i].count('{') - lines[i].count('}')
                 i += 1
 
-                # Captura del cuerpo por balanceo de llaves
+                # Capture body function by brace balancing
                 while i < total_lines and brace_count > 0:
                     actual_block.append(lines[i])
                     brace_count += lines[i].count('{') - lines[i].count('}')
                     i += 1
 
-                if not contiene_excluidos(actual_block):
+                if not contain_exclude(actual_block):
                     result.append(''.join(actual_block))
             continue
 
-        elif tipo == 'python':
+        # Python language
+        elif language == 'python':
             actual_block = []
             indent_level = None
 
-            # Agrega decoradores y busca `def`
+            # Look for def
             while i < total_lines:
                 actual_block.append(lines[i])
                 if lines[i].strip().startswith("def "):
@@ -147,7 +150,7 @@ def parse_code(source_code):
                     break
                 i += 1
 
-            # Agrega el cuerpo indentado
+            # Add indented body
             while i < total_lines:
                 line_indent = len(lines[i]) - len(lines[i].lstrip())
                 if line_indent > indent_level or not lines[i].strip():
@@ -156,11 +159,12 @@ def parse_code(source_code):
                 else:
                     break
 
-            if not contiene_excluidos(actual_block):
+            if not contain_exclude(actual_block):
                 result.append(''.join(actual_block))
             continue
 
-        elif tipo == 'js':
+        # JavaScript language
+        elif language == 'js':
             actual_block = [lines[i]]
             brace_count = lines[i].count('{') - lines[i].count('}')
             i += 1
@@ -170,7 +174,7 @@ def parse_code(source_code):
                 brace_count += lines[i].count('{') - lines[i].count('}')
                 i += 1
 
-            if not contiene_excluidos(actual_block):
+            if not contain_exclude(actual_block):
                 result.append(''.join(actual_block))
             continue
 
@@ -180,6 +184,7 @@ def parse_code(source_code):
     return result
 
 
+# Get all files and return the string
 def generate_prompt_code(complete_path):
     source_files = get_source_files(complete_path)
 
@@ -216,7 +221,6 @@ def main():
 
         result = parse_code(text)
         parser_ai(call_ai(result), complete_path_challenge_directories_resources)
-
 
         try:
             check_compile(directory)
