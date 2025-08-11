@@ -55,17 +55,20 @@ def call_ai(text):
     # Prompt to retrieve the frontend with all the parts
     return client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=[f"Create a {take_style()} frontend for this backend, retrieve all the necessary html, js and css ("
-                  "only use percentages here) retrieve only the code "
-                  "and a line above it indicating static/name or template/name, ignore the healthcheck and if "
-                  "a file misses.",
-                  text]
+        contents=[{
+            "role": "user",
+            "parts": [{
+                "text": f"Create a {take_style()} frontend for this backend, retrieve all the necessary html, js and css"
+                        f" (only use percentages here) retrieve only the code and a line above it indicating static/name"
+                        f" or template/name, this last one is important, ignore the healthcheck and if a file misses. {text}"
+            }]
+        }]
     ).text
 
 
 def check_compile(directory):
     # Check if the challenge compiles
-    os.system("sh " + directory + "/deploy-challenge.sh")
+    os.system("sh " + str(directory) + "/deploy-challenge.sh")
 
 
 # Read the code and return string
@@ -99,8 +102,8 @@ def parse_code(source_code):
         return None
 
     # Check if the function is a healthcheck, do not include it
-    def contain_exclude(bloque):
-        content = ''.join(bloque).lower()
+    def contain_exclude(block):
+        content = ''.join(block).lower()
         return 'healthcheck' in content or 'health' in content
 
     while i < total_lines:
@@ -195,27 +198,28 @@ def main():
     # Getting all the challenge directories of one folder
     directory = '.'
     files = os.listdir(directory)
-    list_challenge_directories = [file for file in files if
-                                  "web" in file]  # All the directories with "web" in their name
+    list_challenge_directories = sorted([file for file in files if
+                                  "web" in file])  # All the directories with "web" in their name
 
     text = ""
+
     # Pipeline to get the backend file, give it to Gemini and write back the answer
-
     for directory in list_challenge_directories:
-        complete_path_challenge_directories_resources = Path(directory + "\\src\\main\\resources\\")
+        directory = Path(directory)
+        complete_path_challenge_directories_resources = directory / "src"  / "main" / "resources"
 
-        if os.path.isdir(Path(directory + "\\src\\main\\java")):
-            complete_path_challenge_directories_java = Path(directory + "\\src\\main\\java\\core_files")
+        if os.path.isdir(directory / "src" / "main" / "java"):
+            complete_path_challenge_directories_java = directory / "src" / "main" / "java" / "core_files"
 
             text = generate_prompt_code(complete_path_challenge_directories_java)
 
-        elif os.path.isdir(Path(directory + "\\src\\main\\js")):
-            complete_path_challenge_directories_js = Path(directory + "\\src\\main\\js")
+        elif os.path.isdir(directory / "src" / "main" / "js"):
+            complete_path_challenge_directories_js = directory / "src" / "main" / "js"
 
             text = generate_prompt_code(complete_path_challenge_directories_js)
 
-        elif os.path.isdir(Path(directory + "\\src\\main\\python")):
-            complete_path_challenge_directories_python = Path(directory + "\\src\\main\\python")
+        elif os.path.isdir(directory / "src" / "main" / "python"):
+            complete_path_challenge_directories_python = directory / "src" / "main" / "python"
 
             text = generate_prompt_code(complete_path_challenge_directories_python)
 
@@ -225,7 +229,7 @@ def main():
         try:
             check_compile(directory)
         except Exception:
-            print(directory + " failed compiling")
+            print(str(directory) + " failed compiling")
 
 
 if __name__ == "__main__":
