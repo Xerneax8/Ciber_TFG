@@ -1,4 +1,6 @@
 import random
+import subprocess
+
 import config
 from google import genai
 import os
@@ -67,8 +69,17 @@ def call_ai(text):
 
 
 def check_compile(directory):
-    # Check if the challenge compiles
-    os.system("sh " + str(directory) + "/deploy-challenge.sh")
+    # Check if the programs compiles
+    parent_directory = os.environ.get("PWD")
+    os.chdir(str(directory))
+
+    try:
+        subprocess.run(["sh", "deploy-challenge.sh"], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Shell script for {str(directory)} failed with exit code {e.returncode}")
+    finally:
+        os.system("docker compose down")
+        os.chdir(parent_directory)
 
 
 # Read the code and return string
@@ -199,14 +210,14 @@ def main():
     directory = '.'
     files = os.listdir(directory)
     list_challenge_directories = sorted([file for file in files if
-                                  "web" in file])  # All the directories with "web" in their name
+                                         "web" in file])  # All the directories with "web" in their name
 
     text = ""
 
     # Pipeline to get the backend file, give it to Gemini and write back the answer
     for directory in list_challenge_directories:
         directory = Path(directory)
-        complete_path_challenge_directories_resources = directory / "src"  / "main" / "resources"
+        complete_path_challenge_directories_resources = directory / "src" / "main" / "resources"
 
         if os.path.isdir(directory / "src" / "main" / "java"):
             complete_path_challenge_directories_java = directory / "src" / "main" / "java" / "core_files"
@@ -226,10 +237,7 @@ def main():
         result = parse_code(text)
         parser_ai(call_ai(result), complete_path_challenge_directories_resources)
 
-        try:
-            check_compile(directory)
-        except Exception:
-            print(str(directory) + " failed compiling")
+        check_compile(directory)
 
 
 if __name__ == "__main__":
