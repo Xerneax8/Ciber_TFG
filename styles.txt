@@ -12,3 +12,5 @@ colorful
 vintage
 formal
 astonishing
+futuristic
+simple

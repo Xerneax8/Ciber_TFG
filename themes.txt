@@ -1,0 +1,12 @@
+shop
+magazine
+vlog
+blog
+news
+educational
+business
+event
+forum
+portfolio
+landing page
+wiki

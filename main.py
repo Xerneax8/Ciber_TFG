@@ -1,13 +1,15 @@
 import random
 import subprocess
+import sys
 
 import config
 from google import genai
 import os
 import re
 from pathlib import Path
+import shutil
 
-num_versions = 0
+num_versions = 10
 
 
 # Get the names of the file that we are going to send to the LLM
@@ -32,6 +34,14 @@ def take_style():
 
     return styles_list[random.randint(0, len(styles_list) - 1)]
 
+def take_theme():
+    with open("themes.txt", "r+") as f:
+        themes = f.read()
+    f.close()
+
+    themes_list = themes.split("\n")
+
+    return themes_list[random.randint(0, len(themes_list) - 1)]
 
 # Parse AI response
 def parser_ai(all_text: str, directory):
@@ -60,9 +70,9 @@ def call_ai(text):
         contents=[{
             "role": "user",
             "parts": [{
-                "text": f"Create a {take_style()} frontend for this backend, retrieve all the necessary html, js and css"
+                "text": f"Create a {take_style()} frontend for this backend with style {take_theme()}, retrieve all the necessary html, js and css"
                         f" (only use percentages here) retrieve only the code and a line above it indicating static/name"
-                        f" or template/name, this last one is important, ignore the healthcheck and if a file misses. {text}"
+                        f" or template/name, this last one is important, ignore the healthcheck and if a file misses. {text} "
             }]
         }]
     ).text
@@ -216,8 +226,13 @@ def main():
 
     # Pipeline to get the backend file, give it to Gemini and write back the answer
     for directory in list_challenge_directories:
+        dir_verions_name = directory + "-versions"
+        dir_versions_complete_path  = Path(os.path.dirname(os.path.abspath(sys.argv[0]))) / dir_verions_name
+        os.mkdir(dir_versions_complete_path)
+        for num in range(num_versions):
+            shutil.copytree(directory, dir_versions_complete_path / (directory + f"-{num+1}"))
+
         directory = Path(directory)
-        complete_path_challenge_directories_resources = directory / "src" / "main" / "resources"
 
         if os.path.isdir(directory / "src" / "main" / "java"):
             complete_path_challenge_directories_java = directory / "src" / "main" / "java" / "core_files"
@@ -235,7 +250,10 @@ def main():
             text = generate_prompt_code(complete_path_challenge_directories_python)
 
         result = parse_code(text)
-        parser_ai(call_ai(result), complete_path_challenge_directories_resources)
+
+        # Create the diferents verions for the students
+        for num in range(num_versions):
+            parser_ai(call_ai(result), dir_versions_complete_path / (str(directory) + f"-{num+1}") / "src" / "main" / "resources")
 
         check_compile(directory)
 
