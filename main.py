@@ -35,6 +35,7 @@ def take_style():
 
     return styles_list[random.randint(0, len(styles_list) - 1)]
 
+
 def take_theme():
     with open("themes.txt", "r+") as f:
         themes = f.read()
@@ -43,6 +44,7 @@ def take_theme():
     themes_list = themes.split("\n")
 
     return themes_list[random.randint(0, len(themes_list) - 1)]
+
 
 # Parse AI response
 def parser_ai(all_text: str, directory):
@@ -78,12 +80,12 @@ def call_ai(text):
         }]
     ).text
 
+
 def check_ai(llm_text, error):
     # Configuring OS to get the API Key
     os.environ['GEMINI_API_KEY'] = config.GEMINI_API_KEY
 
     client = genai.Client(api_key=os.environ.get('GEMINI_API_KEY'))
-
 
     # Prompt to retrieve the frontend with all the parts
     return client.models.generate_content(
@@ -97,7 +99,8 @@ def check_ai(llm_text, error):
         }]
     ).text
 
-def check_deployment_and_health(directory, timeout=60):
+
+def check_deployment_and_health(directory, directory_arg, timeout=60):
     """
     Deploys a Docker container using a shell script and checks its health endpoint.
     Automatically reads the healthcheck URL and correct port (host-side) from docker-compose.yml.
@@ -107,7 +110,7 @@ def check_deployment_and_health(directory, timeout=60):
         print("Error: PWD environment variable not set.")
         return False
 
-    compose_path = os.path.join(Path(parent_directory) / Path(directory), "docker-compose.yml")
+    compose_path = os.path.join(Path(directory_arg) / Path(directory), "docker-compose.yml")
     if not os.path.exists(compose_path):
         print(f"Error: docker-compose.yml not found in {directory}")
         return False
@@ -155,7 +158,7 @@ def check_deployment_and_health(directory, timeout=60):
 
         print(f"Using healthcheck URL: {health_url}")
 
-        os.chdir(Path(directory))
+        os.chdir(Path(directory_arg) / Path(directory))
         print(f"Changed to directory: {os.getcwd()}")
 
         # --- Run deployment script ---
@@ -193,8 +196,6 @@ def check_deployment_and_health(directory, timeout=60):
         subprocess.run(["docker", "compose", "down"], capture_output=True)
         os.chdir(parent_directory)
         print(f"Returned to directory: {parent_directory}\n")
-
-
 
 
 # Read the code and return string
@@ -323,20 +324,20 @@ def generate_prompt_code(complete_path):
 def main():
     # Get all arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d","--directory")
+    parser.add_argument("-d", "--directory")
     parser.add_argument("-n", "--number")
     parser.add_argument("-r", "--retries")
     args = parser.parse_args()
     num_versions = int(args.number)
     max_retries = int(args.retries)
-    directory = args.directory
+    directory_args = args.directory
 
     if num_versions <= 0:
         print("Number of versions should be greater than zero...")
         exit()
 
     # Getting all the challenge directories of one folder
-    files = os.listdir(directory)
+    files = os.listdir(directory_args)
     list_challenge_directories = sorted([file for file in files if
                                          "web" in file and "versions" not in file])  # All the directories with "web" in their name
 
@@ -344,7 +345,7 @@ def main():
 
     # Pipeline to get the backend file, give it to Gemini and write back the answer
     for directory in list_challenge_directories:
-        ret_str = check_deployment_and_health(directory)
+        ret_str = check_deployment_and_health(directory, directory_args)
         if ret_str == "OK":
             dir_versions_name = directory + "-versions"
             dir_versions_complete_path = Path(os.path.dirname(os.path.abspath(sys.argv[0]))) / dir_versions_name
@@ -352,7 +353,7 @@ def main():
             try:
                 os.mkdir(dir_versions_complete_path)
                 for num in range(num_versions):
-                    shutil.copytree(directory, dir_versions_complete_path / (directory + f"-{num+1}"))
+                    shutil.copytree(directory, dir_versions_complete_path / (directory + f"-{num + 1}"))
 
                 directory = Path(directory)
 
@@ -377,9 +378,11 @@ def main():
                 for num in range(num_versions):
                     llm_text = call_ai(result)
                     parser_ai(llm_text,
-                              dir_versions_complete_path / (str(directory) + f"-{num + 1}") / "src" / "main" / "resources")
+                              dir_versions_complete_path / (
+                                          str(directory) + f"-{num + 1}") / "src" / "main" / "resources")
 
-                    ret_str = check_deployment_and_health(Path(dir_versions_name) / Path(str(directory)+ f"-{num + 1}"))
+                    ret_str = check_deployment_and_health(
+                        Path(dir_versions_name) / Path(str(directory) + f"-{num + 1}"), directory_args)
                     num_retries = 0
 
                     # Check for errors na create new code if necessary
@@ -387,9 +390,10 @@ def main():
                         llm_checked_text = check_ai(llm_text, ret_str)
                         parser_ai(llm_checked_text,
                                   dir_versions_complete_path / (
-                                              str(directory) + f"-{num + 1}") / "src" / "main" / "resources")
+                                          str(directory) + f"-{num + 1}") / "src" / "main" / "resources")
 
-                        ret_str = check_deployment_and_health(Path(dir_versions_name) / Path(str(directory)+ f"-{num + 1}"))
+                        ret_str = check_deployment_and_health(
+                            Path(dir_versions_name) / Path(str(directory) + f"-{num + 1}"), directory_args)
                         num_retries += 1
 
                     if ret_str != "OK":
@@ -400,7 +404,6 @@ def main():
                 print(str(directory) + " DONE")
         else:
             print("Exercise " + directory + " can't be deployed for checking, check the code...")
-
 
 
 if __name__ == "__main__":
